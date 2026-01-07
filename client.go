@@ -209,7 +209,9 @@ func isRetryableStatusCode(code int) bool {
 func isEmptyHTMLResponse(res *http.Response) bool {
 	contentType := res.Header.Get("Content-Type")
 	contentLength := res.Header.Get("Content-Length")
-	return strings.HasPrefix(contentType, "text/html") && contentLength == "0"
+	return res.StatusCode == http.StatusOK &&
+		strings.HasPrefix(contentType, "text/html") &&
+		contentLength == "0"
 }
 
 // callAPI wraps debug information around a HTTP request.
