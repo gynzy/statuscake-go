@@ -199,9 +199,19 @@ func (c *Client) retriesExceeded(idx int) bool {
 	return idx > c.options.maxRetries
 }
 
-// determine if a status code is retryable (4xx or 5xx errors).
+// determine if a status code is retryable (429 or 5xx errors).
 func isRetryableStatusCode(code int) bool {
-	return code >= 400 && code < 600
+	return code == http.StatusTooManyRequests || (code >= 500 && code < 600)
+}
+
+// isEmptyHTMLResponse checks if a response is an empty HTML response
+// which indicates a proxy/infrastructure issue that should be retried.
+func isEmptyHTMLResponse(res *http.Response) bool {
+	contentType := res.Header.Get("Content-Type")
+	contentLength := res.Header.Get("Content-Length")
+	return res.StatusCode == http.StatusOK &&
+		strings.HasPrefix(contentType, "text/html") &&
+		contentLength == "0"
 }
 
 // callAPI wraps debug information around a HTTP request.
@@ -229,11 +239,11 @@ func (c *Client) callAPI(req *http.Request) (*http.Response, error) {
 			return res, fmt.Errorf("retries exceeded: %w", err)
 		}
 		// Exceeded retries but there is a contextual transient error.
-		if res != nil && isRetryableStatusCode(res.StatusCode) && c.retriesExceeded(backoffIdx+1) {
+		if res != nil && (isRetryableStatusCode(res.StatusCode) || isEmptyHTMLResponse(res)) && c.retriesExceeded(backoffIdx+1) {
 			break
 		}
 		// Otherwise handle the error.
-		if err != nil || (res != nil && isRetryableStatusCode(res.StatusCode)) {
+		if err != nil || (res != nil && (isRetryableStatusCode(res.StatusCode) || isEmptyHTMLResponse(res))) {
 			backoffFor := c.options.backoff.Backoff(backoffIdx)
 
 			timer := time.NewTimer(backoffFor)
